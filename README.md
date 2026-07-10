@@ -80,7 +80,7 @@ After registration, restart the assistant if the MCP tools are not visible. Then
   YYYY-MM-DD_HHMM_vocab-test.md
 ```
 
-The detailed protocol is in `docs/test-agent.md`; the selection, grading, and history logic is in `src/english_news_agent/test_agent.py`.
+The detailed protocol is in `docs/test-agent.md`; the selection, LLM-judge grading, fallback grading, and history logic is in `src/english_news_agent/test_agent.py`.
 
 ## Streamlit App
 

@@ -1,11 +1,18 @@
 from __future__ import annotations
 
+import json
+import os
 import re
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
+from textwrap import dedent
 from typing import Iterable, Sequence
 
+from dotenv import load_dotenv
+from openai import OpenAI
+
+from english_news_agent.models import StudySettings
 from english_news_agent.utils import slugify
 
 
@@ -48,6 +55,7 @@ class GradeResult:
     result: str
     feedback: str
     points: float
+    rationale: str = ""
 
 
 def select_vocab_candidates(
@@ -172,6 +180,7 @@ def build_vocab_test_markdown(
                 "- user_answer:",
                 "- result:",
                 "- feedback:",
+                "- rationale:",
                 "",
             ]
         )
@@ -192,29 +201,147 @@ def build_vocab_test_markdown(
     return "\n".join(lines)
 
 
-def grade_answer(question: VocabQuestion | dict, user_answer: str) -> GradeResult:
+def grade_answer(
+    question: VocabQuestion | dict,
+    user_answer: str,
+    settings: StudySettings | None = None,
+    use_llm: bool = True,
+) -> GradeResult:
     question = _coerce_question(question)
     answer = user_answer.strip()
     if not answer:
-        return GradeResult("incorrect", "No answer was provided.", 0)
+        return GradeResult("incorrect", "No answer was provided.", 0, "The learner submitted an empty answer.")
+
+    if use_llm:
+        try:
+            return grade_answer_with_llm(question, answer, settings)
+        except Exception:
+            return grade_answer_with_rules(question, answer)
+
+    return grade_answer_with_rules(question, answer)
+
+
+def grade_answer_with_llm(
+    question: VocabQuestion,
+    user_answer: str,
+    settings: StudySettings | None = None,
+) -> GradeResult:
+    load_dotenv()
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY is not set. Create .env from .env.example.")
+
+    settings = settings or StudySettings()
+    client = OpenAI(api_key=api_key)
+    response = client.chat.completions.create(
+        model=settings.model,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You are a strict but fair English vocabulary test grader for Korean learners. "
+                    "Return only strict JSON matching the requested schema."
+                ),
+            },
+            {"role": "user", "content": _build_grading_prompt(question, user_answer)},
+        ],
+        response_format={"type": "json_object"},
+        temperature=0,
+    )
+    raw_output = response.choices[0].message.content or ""
+    return parse_grade_json(raw_output)
+
+
+def grade_answer_with_rules(question: VocabQuestion | dict, user_answer: str) -> GradeResult:
+    question = _coerce_question(question)
+    answer = user_answer.strip()
+    if not answer:
+        return GradeResult("incorrect", "No answer was provided.", 0, "The learner submitted an empty answer.")
 
     if question.question_type in {QuestionType.REVERSE, QuestionType.FILL_BLANK}:
         if _key(answer) == _key(question.correct_answer):
-            return GradeResult("correct", "Correct.", 1)
+            return GradeResult("correct", "Correct.", 1, "The submitted English expression exactly matches the expected answer.")
         if _key(answer) in _key(question.correct_answer) or _key(question.correct_answer) in _key(answer):
-            return GradeResult("partial", f"Close. The expected answer is '{question.correct_answer}'.", 0.5)
-        return GradeResult("incorrect", f"The expected answer is '{question.correct_answer}'.", 0)
+            return GradeResult(
+                "partial",
+                f"Close. The expected answer is '{question.correct_answer}'.",
+                0.5,
+                "The submitted expression partially overlaps with the expected answer.",
+            )
+        return GradeResult(
+            "incorrect",
+            f"The expected answer is '{question.correct_answer}'.",
+            0,
+            "The submitted English expression does not match the expected answer.",
+        )
 
     overlap = _meaning_overlap(answer, question.correct_answer)
     if overlap >= 0.7:
-        return GradeResult("correct", "Correct.", 1)
+        return GradeResult("correct", "Correct.", 1, "The Korean answer covers the expected meaning.")
     if overlap > 0:
         return GradeResult(
             "partial",
             f"Partially correct. A better answer is: {question.correct_answer}",
             0.5,
+            "The Korean answer overlaps with the expected meaning but is incomplete.",
         )
-    return GradeResult("incorrect", f"A better answer is: {question.correct_answer}", 0)
+    return GradeResult(
+        "incorrect",
+        f"A better answer is: {question.correct_answer}",
+        0,
+        "The Korean answer does not cover the expected meaning.",
+    )
+
+
+def parse_grade_json(raw_output: str) -> GradeResult:
+    try:
+        data = json.loads(raw_output)
+    except json.JSONDecodeError as exc:
+        raise ValueError("LLM grade response was not valid JSON.") from exc
+
+    result = str(data.get("result", "")).strip().lower()
+    if result not in {"correct", "partial", "incorrect"}:
+        raise ValueError(f"Invalid grade result: {result}")
+
+    if result == "correct":
+        points = 1
+    elif result == "partial":
+        points = 0.5
+    else:
+        points = 0
+
+    feedback = str(data.get("feedback", "")).strip() or "No feedback provided."
+    rationale = str(data.get("rationale", "")).strip() or "No rationale provided."
+    return GradeResult(result=result, feedback=feedback, points=points, rationale=rationale)
+
+
+def _build_grading_prompt(question: VocabQuestion, user_answer: str) -> str:
+    return dedent(
+        f"""
+        Grade this vocabulary test answer.
+
+        Question type: {question.question_type.value}
+        Prompt: {question.prompt}
+        Target expression: {question.candidate.term}
+        Expected answer: {question.correct_answer}
+        Source section: {question.candidate.source_section}
+        Article example: {question.candidate.example_sentence or ""}
+        Learner answer: {user_answer}
+
+        Return strict JSON with exactly these keys:
+        - result: one of "correct", "partial", "incorrect"
+        - points: 1 for correct, 0.5 for partial, 0 for incorrect
+        - feedback: short feedback to show the learner
+        - rationale: concise grading reason explaining why this result was chosen
+
+        Grading rules:
+        - Accept natural Korean synonyms for meaning questions when they preserve the article-context meaning.
+        - For reverse or fill_blank questions, require the target English expression or a clearly equivalent inflected form.
+        - Use partial only when the answer is meaningfully close but incomplete, too broad, or slightly imprecise.
+        - Do not mark an answer correct just because it shares one generic word with the expected answer.
+        - Keep feedback and rationale concise.
+        """
+    ).strip()
 
 
 def apply_answer_to_test_markdown(
@@ -228,6 +355,7 @@ def apply_answer_to_test_markdown(
         rf"- user_answer:).*?"
         rf"(\n- result:).*?"
         rf"(\n- feedback:).*?"
+        rf"(\n- rationale:).*?"
         rf"(?=\n\n### |\n\n## Result Summary|\Z)",
         re.DOTALL,
     )
@@ -237,6 +365,7 @@ def apply_answer_to_test_markdown(
             f"{match.group(1)} {_inline(user_answer)}"
             f"{match.group(2)} {grade.result}"
             f"{match.group(3)} {_inline(grade.feedback)}"
+            f"{match.group(4)} {_inline(grade.rationale)}"
         )
 
     updated, count = pattern.subn(replace, markdown, count=1)

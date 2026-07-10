@@ -14,6 +14,7 @@ from english_news_agent.test_agent import (
     build_vocab_test_markdown,
     extract_vocab_candidates,
     grade_answer,
+    parse_grade_json,
     select_vocab_candidates,
     test_filename as make_test_filename,
     update_history_markdown,
@@ -110,9 +111,9 @@ def test_grade_answer_scores_meaning_overlap():
         correct_answer="법을 위반하다",
     )
 
-    assert grade_answer(question, "법을 위반하다").result == "correct"
-    assert grade_answer(question, "위반하다").result == "partial"
-    assert grade_answer(question, "찬성하다").result == "incorrect"
+    assert grade_answer(question, "법을 위반하다", use_llm=False).result == "correct"
+    assert grade_answer(question, "위반하다", use_llm=False).result == "partial"
+    assert grade_answer(question, "찬성하다", use_llm=False).result == "incorrect"
 
 
 def test_grade_answer_scores_reverse_questions():
@@ -129,8 +130,12 @@ def test_grade_answer_scores_reverse_questions():
         correct_answer="defiant",
     )
 
-    assert grade_answer(question, "defiant") == GradeResult("correct", "Correct.", 1)
-    assert grade_answer(question, "defiance").result == "incorrect"
+    correct_grade = grade_answer(question, "defiant", use_llm=False)
+
+    assert correct_grade.result == "correct"
+    assert correct_grade.points == 1
+    assert correct_grade.rationale
+    assert grade_answer(question, "defiance", use_llm=False).result == "incorrect"
 
 
 def test_apply_answer_to_test_markdown_updates_question_block():
@@ -141,13 +146,14 @@ def test_apply_answer_to_test_markdown_updates_question_block():
         source_section="Vocabulary",
     )
     markdown = build_vocab_test_markdown([candidate], datetime(2026, 7, 10, 21, 30))
-    grade = GradeResult("partial", "Close answer.", 0.5)
+    grade = GradeResult("partial", "Close answer.", 0.5, "The answer is close but too broad.")
 
     updated = apply_answer_to_test_markdown(markdown, 1, "깨다", grade)
 
     assert "- user_answer: 깨다" in updated
     assert "- result: partial" in updated
     assert "- feedback: Close answer." in updated
+    assert "- rationale: The answer is close but too broad." in updated
 
 
 def test_history_entry_and_update_history_markdown():
@@ -173,6 +179,35 @@ def test_history_entry_and_update_history_markdown():
 
 def test_test_filename_is_timestamped():
     assert make_test_filename(datetime(2026, 7, 10, 21, 30)) == "2026-07-10_2130_vocab-test.md"
+
+
+def test_parse_grade_json_normalizes_points_and_rationale():
+    grade = parse_grade_json(
+        '{"result": "partial", "points": 0.2, "feedback": "Almost.", "rationale": "Synonym is close but incomplete."}'
+    )
+
+    assert grade == GradeResult("partial", "Almost.", 0.5, "Synonym is close but incomplete.")
+
+
+def test_grade_answer_falls_back_to_rules_when_llm_is_unavailable(monkeypatch):
+    question = VocabQuestion(
+        id=1,
+        candidate=VocabCandidate(
+            term="breach",
+            meaning_ko="법을 위반하다",
+            source_note="article.md",
+            source_section="Vocabulary",
+        ),
+        question_type=QuestionType.MEANING,
+        prompt="What does breach mean?",
+        correct_answer="법을 위반하다",
+    )
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    grade = grade_answer(question, "위반하다")
+
+    assert grade.result == "partial"
+    assert grade.rationale
 
 
 def test_apply_answer_to_missing_question_raises():

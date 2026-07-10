@@ -79,15 +79,13 @@ Use a rotating mix:
 
 ## Grading Policy
 
-Use `grade_answer()` for deterministic first-pass grading.
+Use `grade_answer()` for LLM-judge grading. The judge returns `result`, `points`, `feedback`, and `rationale`. If the LLM judge is unavailable or returns invalid JSON, the code falls back to deterministic rule-based grading.
 
 - `correct`: full credit.
 - `partial`: half credit, close but incomplete.
 - `incorrect`: no credit.
 
-For Korean meaning answers, overlap with the expected meaning is accepted. For
-English fill-blank or reverse questions, the expected expression should match
-closely.
+For Korean meaning answers, the LLM judge may accept natural synonyms that preserve the article-context meaning. For English fill-blank or reverse questions, it should require the target expression or a clearly equivalent inflected form.
 
 ## Timeout And Fallback Policy
 
