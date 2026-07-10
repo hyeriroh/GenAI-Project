@@ -1,0 +1,10 @@
+streamlit
+openai
+python-dotenv
+pyyaml
+trafilatura
+feedparser
+requests
+pydantic
+pytest
+
