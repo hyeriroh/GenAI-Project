@@ -318,28 +318,23 @@ def parse_grade_json(raw_output: str) -> GradeResult:
 def _build_grading_prompt(question: VocabQuestion, user_answer: str) -> str:
     return dedent(
         f"""
-        Grade this vocabulary test answer.
+        Grade briefly. Return only JSON.
 
-        Question type: {question.question_type.value}
-        Prompt: {question.prompt}
-        Target expression: {question.candidate.term}
-        Expected answer: {question.correct_answer}
-        Source section: {question.candidate.source_section}
-        Article example: {question.candidate.example_sentence or ""}
-        Learner answer: {user_answer}
+        type: {question.question_type.value}
+        target: {question.candidate.term}
+        expected: {question.correct_answer}
+        example: {question.candidate.example_sentence or ""}
+        answer: {user_answer}
 
-        Return strict JSON with exactly these keys:
-        - result: one of "correct", "partial", "incorrect"
-        - points: 1 for correct, 0.5 for partial, 0 for incorrect
-        - feedback: short feedback to show the learner
-        - rationale: concise grading reason explaining why this result was chosen
+        JSON keys: result, points, feedback, rationale.
+        result: correct | partial | incorrect.
+        points: 1 | 0.5 | 0.
+        feedback: one short sentence.
+        rationale: one short sentence.
 
-        Grading rules:
-        - Accept natural Korean synonyms for meaning questions when they preserve the article-context meaning.
-        - For reverse or fill_blank questions, require the target English expression or a clearly equivalent inflected form.
-        - Use partial only when the answer is meaningfully close but incomplete, too broad, or slightly imprecise.
-        - Do not mark an answer correct just because it shares one generic word with the expected answer.
-        - Keep feedback and rationale concise.
+        Rules: accept Korean synonyms for meaning questions if context is preserved.
+        For English answers, require the target expression or a clear inflected equivalent.
+        Use partial only for close but incomplete answers.
         """
     ).strip()
 

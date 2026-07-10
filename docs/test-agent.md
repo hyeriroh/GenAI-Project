@@ -79,7 +79,7 @@ Use a rotating mix:
 
 ## Grading Policy
 
-Use `grade_answer()` for LLM-judge grading. The judge returns `result`, `points`, `feedback`, and `rationale`. If the LLM judge is unavailable or returns invalid JSON, the code falls back to deterministic rule-based grading.
+Use `grade_answer()` for concise LLM-judge grading. The judge returns `result`, `points`, `feedback`, and `rationale`; keep feedback and rationale to one short sentence each. If the LLM judge is unavailable or returns invalid JSON, the code falls back to deterministic rule-based grading.
 
 - `correct`: full credit.
 - `partial`: half credit, close but incomplete.
