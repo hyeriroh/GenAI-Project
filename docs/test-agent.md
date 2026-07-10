@@ -5,6 +5,10 @@ Obsidian MCP server. The Streamlit app remains focused on generating article
 study notes. The conversational AI plus MCP handles review, testing, grading,
 and history updates.
 
+The runtime path is adapter-based: `run_vocab_test_session()` receives an
+`ObsidianVaultAdapter`, so the same workflow can run against a local vault, a
+future stdio MCP client, or the in-memory MCP mock adapter used by tests.
+
 A local file-based runner is also available for end-to-end testing without MCP:
 
 ```bash
@@ -34,6 +38,11 @@ If the user has configured a different English News folder, use that path
 instead. Keep test files and results in the same test note.
 
 ## MCP Workflow
+
+The implemented orchestrator is `run_vocab_test_session()` in
+`src/english_news_agent/test_orchestrator.py`. It uses the adapter methods
+`list_notes`, `read_note`, `ensure_folder`, and `write_note`;
+`MockObsidianAdapter` verifies the MCP-style protocol in tests.
 
 1. List or confirm the available vault.
 2. Ensure `40 Resources/English News/Test` exists.
