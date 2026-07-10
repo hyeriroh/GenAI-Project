@@ -7,7 +7,6 @@ This MVP is intended for local personal use. It does not use paid news APIs and 
 ## Setup
 
 ```bash
-cd english-news-agent
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
