@@ -85,6 +85,21 @@ def test_render_sentence_fallback_uses_sentence_labels():
     assert "### Paragraph 1" not in markdown
 
 
+def test_render_sentence_translation_removes_prefix_and_extra_sentences():
+    analysis = sample_analysis()
+    analysis.structure_type = "sentence"
+    analysis.paragraph_translations[0].korean_translation = (
+        "**해석:** 이 산업은 AI 지출로 큰 추진력을 얻었습니다. "
+        "회사는 한국 반도체 역량 개발에 투자했습니다."
+    )
+
+    markdown = render_article_note(analysis, "Original text", "https://example.com")
+
+    assert "**해석:**" not in markdown
+    assert "이 산업은 AI 지출로 큰 추진력을 얻었습니다." in markdown
+    assert "회사는 한국 반도체 역량 개발에 투자했습니다." not in markdown
+
+
 def test_render_article_note_contains_vocabulary_and_collocation_tables():
     markdown = render_article_note(sample_analysis(), "Original text", "https://example.com")
 
@@ -125,7 +140,8 @@ def test_render_sentence_lookup_uses_study_sections():
         )
     )
 
-    assert "**해석:** 회담은 중단된 상태였습니다." in markdown
+    assert "회담은 중단된 상태였습니다." in markdown
+    assert "**해석:**" not in markdown
     assert "**구문 설명**" in markdown
     assert "**문법 포인트**" in markdown
     assert "**어려운 단어**" in markdown

@@ -78,7 +78,7 @@ def render_expression_lookup(lookup: ExpressionLookup) -> str:
     lines = [
         f"### {datetime.now().strftime('%Y-%m-%d %H:%M')} - {lookup.expression}",
         "",
-        f"**해석:** {lookup.sentence_translation_ko or lookup.natural_translation_ko}",
+        _clean_translation(lookup.sentence_translation_ko or lookup.natural_translation_ko),
         "",
         "**구문 설명**",
         "",
@@ -130,7 +130,7 @@ def _korean_translation_lines(analysis: ArticleAnalysis, original_article: str) 
                     "",
                     item.original.strip(),
                     "",
-                    item.korean_translation.strip(),
+                    _translation_for_unit(analysis, item.korean_translation),
                     "",
                 ]
             )
@@ -154,6 +154,37 @@ def _unit_label(analysis: ArticleAnalysis) -> str:
     if analysis.structure_type == "sentence":
         return "Sentence"
     return "Paragraph"
+
+
+def _translation_for_unit(analysis: ArticleAnalysis, translation: str) -> str:
+    cleaned = _clean_translation(translation)
+    if analysis.structure_type == "sentence":
+        return _first_translation_sentence(cleaned)
+    return cleaned
+
+
+def _clean_translation(value: str) -> str:
+    cleaned = value.strip()
+    prefixes = ["**해석:**", "**해석**:", "해석:", "해석："]
+    changed = True
+    while changed:
+        changed = False
+        for prefix in prefixes:
+            if cleaned.startswith(prefix):
+                cleaned = cleaned[len(prefix):].strip()
+                changed = True
+    return cleaned
+
+
+def _first_translation_sentence(value: str) -> str:
+    normalized = " ".join(value.split())
+    if not normalized:
+        return ""
+    first_line = normalized.split("\n", 1)[0].strip()
+    for marker in [". ", "? ", "! "]:
+        if marker in first_line:
+            return first_line.split(marker, 1)[0].strip() + marker.strip()
+    return first_line
 
 
 def _expression_lines(expressions) -> list[str]:
