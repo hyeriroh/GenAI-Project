@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 
 import pytest
 
@@ -74,6 +74,64 @@ def test_select_vocab_candidates_prioritizes_history_misses():
 
     assert selected[0].term == "defiant"
     assert selected[0].missed_count == 3
+
+
+def test_select_vocab_candidates_uses_review_signals():
+    recent_note = SourceNote(
+        "recent.md",
+        """# Article
+
+## Vocabulary
+
+| Word | Part of Speech | Korean Meaning | Example |
+| --- | --- | --- | --- |
+| resilience | noun | 회복력 | Markets showed resilience. |
+| defiant | adjective | 굴복하지 않는 | The leader remained defiant. |
+
+## Phrases and Collocations
+
+| Phrase | Korean Meaning | Example |
+| --- | --- | --- |
+| regulatory scrutiny | 규제 감시 | Firms face regulatory scrutiny. |
+""",
+    )
+    older_note = SourceNote(
+        "older.md",
+        """# Article
+
+## Vocabulary
+
+| Word | Part of Speech | Korean Meaning | Example |
+| --- | --- | --- | --- |
+| regulatory scrutiny | noun | 규제 감시 | Banks face regulatory scrutiny. |
+""",
+    )
+    history = """# English News Vocabulary Test History
+
+## Summary
+
+| Date | Test | Score | Total | Focus | Review Needed |
+| --- | --- | ---: | ---: | --- | --- |
+| 2026-06-01 | [[old-test]] | 8 | 10 | recent articles + prior misses | resilience |
+
+## Weak Vocabulary
+
+| Word | Missed | Correct Streak | Last Seen | Importance | Notes |
+| --- | ---: | ---: | --- | ---: | --- |
+| defiant | 0 | 3 | 2026-07-10 | 1 | recently mastered |
+| resilience | 1 | 0 | 2026-06-01 | 5 | needs spaced review |
+"""
+
+    selected = select_vocab_candidates([recent_note, older_note], history, limit=3, today=date(2026, 7, 10))
+    by_term = {candidate.term: candidate for candidate in selected}
+
+    assert selected[0].term == "resilience"
+    assert by_term["resilience"].last_seen == "2026-06-01"
+    assert by_term["resilience"].importance_score == 5
+    assert by_term["regulatory scrutiny"].frequency_count == 2
+    assert by_term["regulatory scrutiny"].difficulty_score > 0
+    assert by_term["defiant"].correct_streak == 3
+    assert by_term["defiant"].score < by_term["resilience"].score
 
 
 def test_build_vocab_test_markdown_contains_questions_and_policy():

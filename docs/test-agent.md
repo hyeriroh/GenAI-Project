@@ -72,8 +72,11 @@ Scoring:
 
 - Prior missed words receive a large bonus.
 - Recent source notes receive a recency bonus.
-- Vocabulary table entries receive a higher source-section bonus than phrases.
-- Words already answered correctly are penalized.
+- Words not tested recently receive a small spaced-review bonus; words tested in the last few days are penalized.
+- Repeated terms across article notes receive a frequency bonus.
+- Longer terms, multi-word expressions, and advanced parts of speech receive a difficulty bonus.
+- Vocabulary and useful-expression sections receive source-importance bonuses, with optional `Importance` values from `test-history.md` taking priority.
+- Words with a higher `Correct Streak` are penalized.
 
 ## Question Types
 

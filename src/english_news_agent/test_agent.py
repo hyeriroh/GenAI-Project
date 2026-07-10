@@ -4,7 +4,7 @@ import json
 import os
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 from textwrap import dedent
 from typing import Iterable, Sequence
@@ -39,6 +39,11 @@ class VocabCandidate:
     missed_count: int = 0
     correct_count: int = 0
     score: float = 0
+    frequency_count: int = 1
+    difficulty_score: int = 0
+    importance_score: int = 0
+    correct_streak: int = 0
+    last_seen: str = ""
 
 
 @dataclass(frozen=True)
@@ -62,42 +67,71 @@ def select_vocab_candidates(
     notes: Sequence[SourceNote | dict[str, str]],
     history_markdown: str = "",
     limit: int = 10,
+    today: date | None = None,
 ) -> list[VocabCandidate]:
     """Select review candidates from article notes and test history.
 
-    Notes are expected newest-first. The function is deterministic so MCP-driven
-    quiz sessions can be reproduced and tested without live vault access.
+    Notes are expected newest-first. The scoring combines weak-history signals,
+    recency, term frequency, difficulty, and source-section importance.
     """
+    today = today or date.today()
     history = _parse_history(history_markdown)
-    deduped: dict[str, VocabCandidate] = {}
+    occurrences: list[tuple[int, VocabCandidate]] = []
+    frequency: dict[str, int] = {}
 
     for note_index, note in enumerate(notes):
         source = _coerce_note(note)
         for candidate in extract_vocab_candidates(source):
             key = _key(candidate.term)
-            missed = history["missed"].get(key, 0)
-            correct = history["correct"].get(key, 0)
-            recency_bonus = max(0, 20 - note_index * 2)
-            source_bonus = _source_section_bonus(candidate.source_section)
-            score = recency_bonus + source_bonus + missed * 12 - correct * 4
-            scored = VocabCandidate(
-                term=candidate.term,
-                meaning_ko=candidate.meaning_ko,
-                source_note=candidate.source_note,
-                source_section=candidate.source_section,
-                part_of_speech=candidate.part_of_speech,
-                example_sentence=candidate.example_sentence,
-                missed_count=missed,
-                correct_count=correct,
-                score=score,
-            )
-            existing = deduped.get(key)
-            if existing is None or scored.score > existing.score:
-                deduped[key] = scored
+            occurrences.append((note_index, candidate))
+            frequency[key] = frequency.get(key, 0) + 1
+
+    deduped: dict[str, VocabCandidate] = {}
+    for note_index, candidate in occurrences:
+        key = _key(candidate.term)
+        missed = history["missed"].get(key, 0)
+        correct_streak = history["correct_streak"].get(key, 0)
+        last_seen = history["last_seen"].get(key, "")
+        frequency_count = frequency.get(key, 1)
+        difficulty_score = _difficulty_score(candidate)
+        importance_score = history["importance"].get(key, _importance_score(candidate))
+        recency_bonus = max(0, 20 - note_index * 2)
+        source_bonus = _source_section_bonus(candidate.source_section)
+        frequency_bonus = min(frequency_count - 1, 4) * 2
+        last_seen_adjustment = _last_seen_adjustment(last_seen, today)
+        score = (
+            recency_bonus
+            + source_bonus
+            + missed * 12
+            - correct_streak * 5
+            + frequency_bonus
+            + difficulty_score
+            + importance_score
+            + last_seen_adjustment
+        )
+        scored = VocabCandidate(
+            term=candidate.term,
+            meaning_ko=candidate.meaning_ko,
+            source_note=candidate.source_note,
+            source_section=candidate.source_section,
+            part_of_speech=candidate.part_of_speech,
+            example_sentence=candidate.example_sentence,
+            missed_count=missed,
+            correct_count=correct_streak,
+            score=score,
+            frequency_count=frequency_count,
+            difficulty_score=difficulty_score,
+            importance_score=importance_score,
+            correct_streak=correct_streak,
+            last_seen=last_seen,
+        )
+        existing = deduped.get(key)
+        if existing is None or scored.score > existing.score:
+            deduped[key] = scored
 
     return sorted(
         deduped.values(),
-        key=lambda item: (-item.score, -item.missed_count, item.term.lower()),
+        key=lambda item: (-item.score, -item.missed_count, -item.frequency_count, item.term.lower()),
     )[:limit]
 
 
@@ -160,9 +194,10 @@ def build_vocab_test_markdown(
         *_source_note_lines(source_notes),
         "",
         "## Selection Policy",
-        "- Prior incorrect answers are prioritized.",
+        "- Prior incorrect answers and stale words are prioritized.",
         "- Recent English News notes are mixed with weak vocabulary.",
-        "- Words already answered correctly are penalized.",
+        "- Repeated article terms, difficult words, and important source sections receive small bonuses.",
+        "- Words recently answered correctly several times are penalized.",
         "",
         "## Questions",
         "",
@@ -404,8 +439,8 @@ def update_history_markdown(history_markdown: str, entry: str) -> str:
                 "",
                 "## Weak Vocabulary",
                 "",
-                "| Word | Missed | Last Seen | Notes |",
-                "| --- | ---: | --- | --- |",
+                "| Word | Missed | Correct Streak | Last Seen | Importance | Notes |",
+                "| --- | ---: | ---: | --- | ---: | --- |",
                 "",
             ]
         )
@@ -499,20 +534,57 @@ def _table_rows(section: str) -> list[list[str]]:
     return rows
 
 
-def _parse_history(history_markdown: str) -> dict[str, dict[str, int]]:
+def _parse_history(history_markdown: str) -> dict[str, dict[str, int] | dict[str, str]]:
     missed: dict[str, int] = {}
-    correct: dict[str, int] = {}
-    weak_section = _section(history_markdown, "Weak Vocabulary")
-    for row in _table_rows(weak_section):
-        if len(row) < 2 or row[0].lower() == "word":
-            continue
-        missed[_key(row[0])] = _to_int(row[1])
+    correct_streak: dict[str, int] = {}
+    last_seen: dict[str, str] = {}
+    importance: dict[str, int] = {}
+
+    weak_rows = _table_rows(_section(history_markdown, "Weak Vocabulary"))
+    if weak_rows:
+        headers = [_history_header(cell) for cell in weak_rows[0]]
+        for row in weak_rows[1:]:
+            if not row or row[0].lower() == "word":
+                continue
+            values = {headers[index]: row[index] for index in range(min(len(headers), len(row)))}
+            word = values.get("word") or row[0]
+            key = _key(word)
+            if not key:
+                continue
+            missed[key] = _to_int(values.get("missed", "0"))
+            correct_streak[key] = _to_int(
+                values.get("correct_streak", values.get("correct", values.get("streak", "0")))
+            )
+            last_seen_value = values.get("last_seen", "")
+            if last_seen_value:
+                last_seen[key] = last_seen_value
+            if "importance" in values:
+                importance[key] = _to_int(values["importance"])
+
+    summary_rows = _table_rows(_section(history_markdown, "Summary"))
+    if summary_rows:
+        headers = [_history_header(cell) for cell in summary_rows[0]]
+        for row in summary_rows[1:]:
+            values = {headers[index]: row[index] for index in range(min(len(headers), len(row)))}
+            completed_date = values.get("date", "")
+            for term in _split_review_terms(values.get("review_needed", "")):
+                key = _key(term)
+                if not key:
+                    continue
+                missed[key] = max(1, missed.get(key, 0))
+                if completed_date and key not in last_seen:
+                    last_seen[key] = completed_date
 
     for word in re.findall(r"Result:\s*Correct\s*\n.*?(?:Word|Expression):\s*(.+)", history_markdown, re.IGNORECASE):
         key = _key(word)
-        correct[key] = correct.get(key, 0) + 1
+        correct_streak[key] = correct_streak.get(key, 0) + 1
 
-    return {"missed": missed, "correct": correct}
+    return {
+        "missed": missed,
+        "correct_streak": correct_streak,
+        "last_seen": last_seen,
+        "importance": importance,
+    }
 
 
 def _question_prompt(candidate: VocabCandidate, question_type: QuestionType) -> tuple[str, str]:
@@ -546,6 +618,76 @@ def _source_section_bonus(section: str) -> int:
     if section == "Useful Expressions":
         return 4
     return 2
+
+
+def _difficulty_score(candidate: VocabCandidate) -> int:
+    term = candidate.term.strip()
+    token_count = len(term.split())
+    length_bonus = 0
+    if len(term) >= 12:
+        length_bonus = 3
+    elif len(term) >= 8:
+        length_bonus = 2
+    elif len(term) >= 6:
+        length_bonus = 1
+    phrase_bonus = min(max(token_count - 1, 0) * 2, 4)
+    advanced_pos_bonus = 1 if candidate.part_of_speech.lower() in {"adjective", "adverb", "verb"} else 0
+    return min(length_bonus + phrase_bonus + advanced_pos_bonus, 8)
+
+
+def _importance_score(candidate: VocabCandidate) -> int:
+    section_score = {
+        "Vocabulary": 4,
+        "Useful Expressions": 3,
+        "Phrases and Collocations": 2,
+    }.get(candidate.source_section, 1)
+    example_bonus = 1 if candidate.example_sentence else 0
+    phrase_bonus = 1 if len(candidate.term.split()) > 1 else 0
+    return min(section_score + example_bonus + phrase_bonus, 6)
+
+
+def _last_seen_adjustment(last_seen: str, today: date) -> int:
+    seen_date = _parse_date(last_seen)
+    if seen_date is None:
+        return 4
+    days = (today - seen_date).days
+    if days < 0:
+        return 0
+    if days <= 2:
+        return -8
+    if days <= 7:
+        return -4
+    if days <= 21:
+        return 2
+    return 6
+
+
+def _parse_date(value: str) -> date | None:
+    match = re.search(r"\d{4}-\d{2}-\d{2}", value)
+    if not match:
+        return None
+    try:
+        return datetime.strptime(match.group(0), "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def _history_header(value: str) -> str:
+    normalized = re.sub(r"[^a-z0-9]+", "_", value.lower()).strip("_")
+    aliases = {
+        "review_needed": "review_needed",
+        "last_seen": "last_seen",
+        "correct_streak": "correct_streak",
+        "correct_count": "correct_streak",
+        "streak": "correct_streak",
+    }
+    return aliases.get(normalized, normalized)
+
+
+def _split_review_terms(value: str) -> list[str]:
+    if not value or value.strip() == "-":
+        return []
+    return [term.strip() for term in value.split(",") if term.strip() and term.strip() != "-"]
 
 
 def _source_note_lines(source_notes: Iterable[str]) -> list[str]:
