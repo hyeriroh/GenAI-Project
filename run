@@ -4,11 +4,16 @@ set -euo pipefail
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$APP_DIR"
 
-if ! command -v streamlit >/dev/null 2>&1; then
-  echo "streamlit is not installed or not on PATH."
+PYTHON_BIN="${PYTHON:-python}"
+if [[ -x "$APP_DIR/.venv/bin/python" ]]; then
+  PYTHON_BIN="$APP_DIR/.venv/bin/python"
+fi
+
+if ! "$PYTHON_BIN" -m streamlit --version >/dev/null 2>&1; then
+  echo "streamlit is not installed for $PYTHON_BIN."
   echo "Install dependencies first:"
   echo "  python -m pip install -r requirements.txt"
   exit 1
 fi
 
-exec streamlit run app.py
+exec "$PYTHON_BIN" -m streamlit run app.py
