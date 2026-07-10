@@ -80,7 +80,7 @@ Register it with your AI assistant using this shape:
 }
 ```
 
-After registration, restart the assistant if the MCP tools are not visible. Then ask `영어뉴스 단어시험 시작`. Test files are stored under:
+After registration, restart the assistant if the MCP tools are not visible. Then ask `영어뉴스 단어시험 시작`. The intended flow is a live chat quiz: Codex asks one question at a time, grades each answer, updates the in-progress test note, and finalizes the result at the end. Test files are stored under:
 
 ```text
 <vault_path>/<news_dir>/Test/
@@ -88,7 +88,7 @@ After registration, restart the assistant if the MCP tools are not visible. Then
   YYYY-MM-DD_HHMM_vocab-test.md
 ```
 
-The detailed protocol is in `docs/test-agent.md`; the selection, LLM-judge grading, fallback grading, and history logic is in `src/english_news_agent/test_agent.py`.
+The detailed protocol is in `docs/test-agent.md`; the selection, LLM-judge grading, fallback grading, and history logic is in `src/english_news_agent/test_agent.py`. `test-history.md` is used on later tests for light personalization.
 
 You can also run the local file-based test runner without MCP:
 

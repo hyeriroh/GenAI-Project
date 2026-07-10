@@ -5,6 +5,11 @@ Obsidian MCP server. The Streamlit app remains focused on generating article
 study notes. The conversational AI plus MCP handles review, testing, grading,
 and history updates.
 
+When the user asks for a vocabulary test in Codex/chat, do not only generate a
+static worksheet. Enter live quiz mode: create the test note, ask one question
+at a time in the chat, grade each answer immediately, update the same test note
+after each answer, then finalize the result and update the history note.
+
 The runtime path is adapter-based: `run_vocab_test_session()` receives an
 `ObsidianVaultAdapter`, so the same workflow can run against a local vault, a
 future stdio MCP client, or the in-memory MCP mock adapter used by tests.
@@ -35,7 +40,23 @@ Use this folder under the connected vault:
 ```
 
 If the user has configured a different English News folder, use that path
-instead. Keep test files and results in the same test note.
+instead. Keep test files and results in the same test note. `test-history.md`
+is the single long-term history file used for later personalization.
+
+## Chat Mode Contract
+
+For a request like `영어뉴스 단어시험 시작`, the assistant should behave as the
+test proctor in the conversation:
+
+- Use `40 Resources/English News/Test/` as the canonical test folder.
+- Use `test-history.md` as the canonical cumulative history file.
+- Select questions from existing English News notes plus prior misses in history.
+- Ask exactly one question at a time in chat and wait for the user's answer.
+- Grade the answer immediately and briefly.
+- Update the in-progress test note after every answer when MCP/file writes are available.
+- At the end, finalize the same test note with score, answers, feedback, and review terms.
+- Append the session summary to `test-history.md` so future tests can lightly personalize selection.
+- Do not create a separate database or a separate result file.
 
 ## MCP Workflow
 
@@ -56,7 +77,7 @@ The implemented orchestrator is `run_vocab_test_session()` in
 8. Build a test filename with `test_filename()`.
 9. Build the test body with `build_vocab_test_markdown()`.
 10. Create the test note in `40 Resources/English News/Test`.
-11. Ask one question at a time in chat.
+11. Ask one question at a time in chat and wait for the user's answer before continuing.
 12. For each user answer:
     - Grade with `grade_answer()`.
     - Update the test markdown with `apply_answer_to_test_markdown()`.
@@ -74,9 +95,10 @@ newest-first.
 Priority order:
 
 1. Words or expressions missed in `test-history.md`.
-2. Vocabulary from recent English News article notes.
-3. Useful expressions from recent article notes.
-4. Phrases and collocations from recent article notes.
+2. Words not tested recently, based on `Last Seen`.
+3. Vocabulary from recent English News article notes.
+4. Useful expressions from recent article notes.
+5. Phrases and collocations from recent article notes.
 
 Scoring:
 
