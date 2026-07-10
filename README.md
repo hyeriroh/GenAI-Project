@@ -80,7 +80,7 @@ Register it with your AI assistant using this shape:
 }
 ```
 
-After registration, restart the assistant if the MCP tools are not visible. Then ask `영어뉴스 단어시험 시작`. The intended flow is a live chat quiz: Codex asks one question at a time, grades each answer, updates the in-progress test note, and finalizes the result at the end. Test files are stored under:
+After registration, restart the assistant if the MCP tools are not visible. Then ask `영어뉴스 단어시험 시작` or `옵시디언 기반 내 단어시험 만들어줘`. The root `AGENTS.md` routes those requests to the live quiz protocol. The intended flow is a live chat quiz: Codex asks one question at a time, grades each answer, updates the in-progress test note, and finalizes the result at the end. Test files are stored under:
 
 ```text
 <vault_path>/<news_dir>/Test/
