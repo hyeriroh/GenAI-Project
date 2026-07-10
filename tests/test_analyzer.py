@@ -75,3 +75,39 @@ def test_build_sentence_fallback_preserves_source_sentence_order():
         "Second sentence.",
         "Third sentence.",
     ]
+
+
+def test_build_sentence_fallback_does_not_attach_unmatched_paragraph_translation():
+    article = "First sentence. Second sentence."
+    analysis = ArticleAnalysis(
+        title="Test",
+        paragraph_translations=[
+            ParagraphTranslation(
+                original="First sentence. Second sentence.",
+                korean_translation="첫 번째 문장입니다. 두 번째 문장입니다.",
+            )
+        ],
+        korean_translation="첫 번째 문장입니다. 두 번째 문장입니다.",
+        english_summary="Summary",
+        korean_summary="요약",
+    )
+
+    fallback = build_sentence_fallback_analysis(analysis, article)
+
+    assert [item.korean_translation for item in fallback.paragraph_translations] == ["", ""]
+
+
+def test_build_sentence_fallback_uses_verified_sentence_translations():
+    article = "First sentence. Second sentence."
+    analysis = analysis_with_paragraphs(["First sentence. Second sentence."])
+
+    fallback = build_sentence_fallback_analysis(
+        analysis,
+        article,
+        {"First sentence.": "첫 번째 문장입니다.", "Second sentence.": "두 번째 문장입니다."},
+    )
+
+    assert [item.korean_translation for item in fallback.paragraph_translations] == [
+        "첫 번째 문장입니다.",
+        "두 번째 문장입니다.",
+    ]

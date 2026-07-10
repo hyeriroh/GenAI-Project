@@ -29,19 +29,23 @@ def mark_sentence_fallback(analysis: ArticleAnalysis) -> ArticleAnalysis:
     return analysis
 
 
-def build_sentence_fallback_analysis(analysis: ArticleAnalysis, article_text: str) -> ArticleAnalysis:
+def build_sentence_fallback_analysis(
+    analysis: ArticleAnalysis,
+    article_text: str,
+    sentence_translations: dict[str, str] | None = None,
+) -> ArticleAnalysis:
     source_sentences = _split_sentences(article_text)
-    existing_translations = [
-        item.korean_translation.strip()
-        for item in analysis.paragraph_translations
-        if item.korean_translation.strip()
-    ]
+    exact_translations = _exact_sentence_translation_map(analysis)
+    sentence_translations = sentence_translations or {}
     analysis.paragraph_translations = [
         ParagraphTranslation(
             original=sentence,
-            korean_translation=existing_translations[index] if index < len(existing_translations) else "",
+            korean_translation=sentence_translations.get(
+                _normalize_sentence(sentence),
+                exact_translations.get(_normalize_sentence(sentence), ""),
+            ),
         )
-        for index, sentence in enumerate(source_sentences)
+        for sentence in source_sentences
     ]
     analysis.korean_translation = "\n\n".join(
         item.korean_translation for item in analysis.paragraph_translations if item.korean_translation
@@ -92,7 +96,11 @@ def analyze_article(
 
     if fallback_analysis is None:
         raise AnalysisParseError("")
-    return build_sentence_fallback_analysis(fallback_analysis, article_text)
+    return build_sentence_fallback_analysis(
+        fallback_analysis,
+        article_text,
+        _translate_sentences_for_fallback(client, article_text, title, settings),
+    )
 
 
 def explain_expression(
@@ -219,6 +227,90 @@ def article_sentences_match(article_text: str, analysis: ArticleAnalysis) -> boo
         for sentence in _split_sentences(item.original)
     ]
     return bool(source_sentences) and source_sentences == analysis_sentences
+
+
+def _exact_sentence_translation_map(analysis: ArticleAnalysis) -> dict[str, str]:
+    translations: dict[str, str] = {}
+    for item in analysis.paragraph_translations:
+        original = item.original.strip()
+        translation = item.korean_translation.strip()
+        if translation and _sentence_count(original) == 1:
+            translations[_normalize_sentence(original)] = translation
+    return translations
+
+
+def _translate_sentences_for_fallback(
+    client,
+    article_text: str,
+    title: str,
+    settings: StudySettings,
+) -> dict[str, str]:
+    source_sentences = _split_sentences(article_text)
+    if not source_sentences:
+        return {}
+    try:
+        response = client.chat.completions.create(
+            model=settings.model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You translate English news sentences into concise Korean. "
+                        "Return only strict JSON matching the requested schema."
+                    ),
+                },
+                {"role": "user", "content": _build_sentence_fallback_prompt(source_sentences, title)},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.1,
+        )
+        raw_output = response.choices[0].message.content or ""
+        return _parse_sentence_fallback_translations(raw_output, source_sentences)
+    except Exception:
+        return {}
+
+
+def _build_sentence_fallback_prompt(source_sentences: list[str], title: str) -> str:
+    numbered_sentences = "\n".join(f"{index}. {sentence}" for index, sentence in enumerate(source_sentences, start=1))
+    return dedent(
+        f"""
+        Translate each sentence into Korean for a news-reading study note.
+
+        Title: {title}
+
+        Return strict JSON with exactly one top-level key:
+        - translations: array of objects with index, original, korean_translation
+
+        Rules:
+        - One input sentence must produce exactly one Korean translation.
+        - korean_translation must translate only that sentence. Do not include other sentences.
+        - Keep Korean concise and natural.
+        - Preserve each original sentence exactly as provided.
+        - Keep the same order and index numbers.
+
+        Sentences:
+        {numbered_sentences}
+        """
+    ).strip()
+
+
+def _parse_sentence_fallback_translations(raw_output: str, source_sentences: list[str]) -> dict[str, str]:
+    data = json.loads(raw_output)
+    rows = data.get("translations", [])
+    if not isinstance(rows, list) or len(rows) != len(source_sentences):
+        return {}
+    translations: dict[str, str] = {}
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            return {}
+        original = str(row.get("original", "")).strip()
+        expected = source_sentences[index]
+        if _normalize_sentence(original) != _normalize_sentence(expected):
+            return {}
+        translation = str(row.get("korean_translation", "")).strip()
+        if translation:
+            translations[_normalize_sentence(expected)] = translation
+    return translations
 
 
 def _split_sentences(text: str) -> list[str]:

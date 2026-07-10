@@ -67,7 +67,8 @@ def test_render_article_note_contains_required_sections():
     assert "Original text" not in markdown
     assert "## 단락별 Translation" in markdown
     assert "### Paragraph 1" in markdown
-    assert "**해석:** 하이브리드 근무는 여전히 논쟁거리입니다." in markdown
+    assert "하이브리드 근무는 여전히 논쟁거리입니다." in markdown
+    assert "**해석:**" not in markdown
     assert "| English Sentence | Korean Translation |" not in markdown
     assert "## Vocabulary" in markdown
     assert "## Expression Lookup Log" in markdown

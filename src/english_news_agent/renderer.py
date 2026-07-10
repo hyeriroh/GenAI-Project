@@ -130,7 +130,7 @@ def _korean_translation_lines(analysis: ArticleAnalysis, original_article: str) 
                     "",
                     item.original.strip(),
                     "",
-                    f"**해석:** {item.korean_translation.strip()}",
+                    item.korean_translation.strip(),
                     "",
                 ]
             )
@@ -140,7 +140,7 @@ def _korean_translation_lines(analysis: ArticleAnalysis, original_article: str) 
     return [
         line
         for index, paragraph in enumerate(paragraphs, start=1)
-        for line in [f"### {_unit_label(analysis)} {index}", "", paragraph, "", "**해석:** ", ""]
+        for line in [f"### {_unit_label(analysis)} {index}", "", paragraph, "", "", ""]
     ]
 
 
