@@ -47,6 +47,52 @@ Use `vault_path` for your local Obsidian vault. The app creates `news_dir` and `
 
 The Streamlit app only generates article study notes. Vocabulary tests are run by an AI assistant through an Obsidian MCP server connected to the same vault. Set up the MCP server before asking the assistant to start a test.
 
+This project uses the Korean Obsidian MCP server from `jkf87/obsidian-mcp-kr` as the reference implementation. Install and build it outside this repository, then register it with your AI assistant.
+
+Prerequisites:
+
+- Node.js 16 or newer
+- Bun, used by the MCP project build setup
+- An Obsidian vault that has been opened in Obsidian at least once
+
+Example install:
+
+```bash
+cd /Users/hrroh/projects
+git clone https://github.com/jkf87/obsidian-mcp-kr.git
+cd obsidian-mcp-kr
+npm install
+npm run build
+```
+
+Example MCP server config:
+
+```json
+{
+  "mcpServers": {
+    "obsidian-mcp-kr": {
+      "command": "node",
+      "args": [
+        "/Users/hrroh/projects/obsidian-mcp-kr/build/main.js",
+        "/Users/hrroh/projects/obsidian"
+      ]
+    }
+  }
+}
+```
+
+For Codex, register the server with equivalent command/args values:
+
+```text
+name: obsidian-mcp-kr
+command: node
+args:
+  - /Users/hrroh/projects/obsidian-mcp-kr/build/main.js
+  - /Users/hrroh/projects/obsidian
+```
+
+After registration, restart the AI assistant session if the MCP tools are not visible yet.
+
 Expected vault layout:
 
 ```text
