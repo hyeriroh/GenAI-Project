@@ -5,6 +5,12 @@ Obsidian MCP server. The Streamlit app remains focused on generating article
 study notes. The conversational AI plus MCP handles review, testing, grading,
 and history updates.
 
+A local file-based runner is also available for end-to-end testing without MCP:
+
+```bash
+PYTHONPATH=src python -m english_news_agent.test_cli start --limit 10
+```
+
 ## Trigger
 
 Start this workflow when the user asks any equivalent of:

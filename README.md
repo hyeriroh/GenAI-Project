@@ -82,6 +82,14 @@ After registration, restart the assistant if the MCP tools are not visible. Then
 
 The detailed protocol is in `docs/test-agent.md`; the selection, LLM-judge grading, fallback grading, and history logic is in `src/english_news_agent/test_agent.py`.
 
+You can also run the local file-based test runner without MCP:
+
+```bash
+PYTHONPATH=src python -m english_news_agent.test_cli start --limit 10
+```
+
+Use `--no-llm` to grade with the deterministic fallback rules.
+
 ## Streamlit App
 
 ```bash
