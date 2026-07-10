@@ -35,7 +35,7 @@ class ParagraphTranslation(BaseModel):
 
 class ArticleAnalysis(BaseModel):
     title: str
-    structure_type: str = "paragraph"
+    structure_type: str = "sentence"
     paragraph_translations: list[ParagraphTranslation] = Field(default_factory=list)
     korean_translation: str
     english_summary: str

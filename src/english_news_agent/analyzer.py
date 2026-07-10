@@ -68,7 +68,7 @@ def analyze_article(
 
     fallback_analysis: ArticleAnalysis | None = None
     for attempt in range(2):
-        prompt = _build_prompt(article_text, title, settings, force_regroup=attempt > 0)
+        prompt = _build_prompt(article_text, title, settings, retry_sentence_alignment=attempt > 0)
         response = client.chat.completions.create(
             model=settings.model,
             messages=[
@@ -87,12 +87,9 @@ def analyze_article(
         raw_output = response.choices[0].message.content or ""
         analysis = parse_analysis_json(raw_output)
         fallback_analysis = analysis
-        if _looks_sentence_split(analysis):
-            continue
-        if not article_sentences_match(article_text, analysis):
-            continue
-        analysis.structure_type = "paragraph"
-        return analysis
+        if article_sentences_match(article_text, analysis) and _is_sentence_by_sentence_analysis(article_text, analysis):
+            analysis.structure_type = "sentence"
+            return analysis
 
     if fallback_analysis is None:
         raise AnalysisParseError("")
@@ -160,13 +157,12 @@ def _build_prompt(
     article_text: str,
     title: str,
     settings: StudySettings,
-    force_regroup: bool = False,
+    retry_sentence_alignment: bool = False,
 ) -> str:
     retry_instruction = ""
-    if force_regroup:
+    if retry_sentence_alignment:
         retry_instruction = """
-        Your previous paragraph structure was rejected because it either split the article sentence-by-sentence or failed to preserve the exact original sentence set and order.
-        Try again. Create fewer, meaning-based paragraphs, but preserve every original sentence exactly once and in order.
+        Your previous sentence alignment was rejected. Try again with exactly one output item per source sentence, in the same order, preserving every original sentence exactly once.
         """
 
     return dedent(
@@ -192,17 +188,16 @@ def _build_prompt(
         - useful_expressions: up to {settings.max_expressions} expressions
         - collocations: up to {settings.max_expressions} phrases
         - Korean content should be natural Korean.
-        - paragraph_translations is the canonical paragraph structure for the study note and must not be empty.
-        - The extracted text may have unreliable line breaks, including one sentence per line. Ignore those line breaks.
-        - Reconstruct natural news-article paragraphs by grouping closely related consecutive sentences by meaning.
-        - Do not split every sentence into its own paragraph. This is invalid.
-        - Each reconstructed paragraph should usually contain 2-5 related sentences.
-        - For a typical news article, create about 5 to 10 coherent paragraphs unless the article is unusually long.
-        - paragraph_translations.original must contain the reconstructed paragraph text, not raw extracted lines.
-        - Preserve original sentence order and wording exactly inside each reconstructed paragraph. Do not paraphrase, rewrite, or omit article sentences.
-        - Only change paragraph boundaries.
-        - korean_translation should be the full article translation based on the same canonical paragraph structure.
         - Example sentences should be short and practical.
+
+        Sentence-by-sentence translation rules:
+        - paragraph_translations is kept for schema compatibility, but it must contain sentence units, not paragraphs.
+        - Split the article into source sentences. Each array item must contain exactly one original sentence and exactly one Korean translation.
+        - paragraph_translations.original must preserve the original sentence wording exactly. Do not paraphrase, rewrite, omit, merge, or reorder sentences.
+        - paragraph_translations.korean_translation must translate only that one source sentence. Do not include translations of earlier or later sentences.
+        - Do not prefix translations with "해석:" or any label.
+        - korean_translation should be the full article translation created by joining the same sentence translations in order.
+        - The extracted text may have unreliable line breaks, including one sentence per line. Ignore those line breaks but preserve sentence order and wording.
 
         Article:
         {article_text}
@@ -227,6 +222,18 @@ def article_sentences_match(article_text: str, analysis: ArticleAnalysis) -> boo
         for sentence in _split_sentences(item.original)
     ]
     return bool(source_sentences) and source_sentences == analysis_sentences
+
+
+def _is_sentence_by_sentence_analysis(article_text: str, analysis: ArticleAnalysis) -> bool:
+    source_sentences = [_normalize_sentence(sentence) for sentence in _split_sentences(article_text)]
+    items = [item for item in analysis.paragraph_translations if item.original.strip()]
+    if len(items) != len(source_sentences):
+        return False
+    return all(
+        _sentence_count(item.original) == 1
+        and _normalize_sentence(item.original) == source_sentences[index]
+        for index, item in enumerate(items)
+    )
 
 
 def _exact_sentence_translation_map(analysis: ArticleAnalysis) -> dict[str, str]:
@@ -284,6 +291,7 @@ def _build_sentence_fallback_prompt(source_sentences: list[str], title: str) -> 
         Rules:
         - One input sentence must produce exactly one Korean translation.
         - korean_translation must translate only that sentence. Do not include other sentences.
+        - Do not prefix translations with "해석:" or any label.
         - Keep Korean concise and natural.
         - Preserve each original sentence exactly as provided.
         - Keep the same order and index numbers.

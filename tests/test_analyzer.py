@@ -1,5 +1,5 @@
 from english_news_agent.analyzer import (
-    _looks_sentence_split,
+    _is_sentence_by_sentence_analysis,
     article_sentences_match,
     build_sentence_fallback_analysis,
     mark_sentence_fallback,
@@ -20,22 +20,18 @@ def analysis_with_paragraphs(paragraphs: list[str]) -> ArticleAnalysis:
     )
 
 
-def test_detects_sentence_by_sentence_paragraphs():
-    analysis = analysis_with_paragraphs([f"Sentence {index}." for index in range(13)])
+def test_accepts_sentence_by_sentence_analysis():
+    article = "Sentence one. Sentence two."
+    analysis = analysis_with_paragraphs(["Sentence one.", "Sentence two."])
 
-    assert _looks_sentence_split(analysis)
+    assert _is_sentence_by_sentence_analysis(article, analysis)
 
 
-def test_allows_meaning_based_grouped_paragraphs():
-    analysis = analysis_with_paragraphs(
-        [
-            "Sentence one. Sentence two. Sentence three.",
-            "Sentence four. Sentence five.",
-            "Sentence six. Sentence seven. Sentence eight.",
-        ]
-    )
+def test_rejects_grouped_paragraph_analysis_for_sentence_mode():
+    article = "Sentence one. Sentence two."
+    analysis = analysis_with_paragraphs(["Sentence one. Sentence two."])
 
-    assert not _looks_sentence_split(analysis)
+    assert not _is_sentence_by_sentence_analysis(article, analysis)
 
 
 def test_mark_sentence_fallback_sets_structure_type():

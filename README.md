@@ -114,7 +114,7 @@ Use `--no-llm` to grade with the deterministic fallback rules.
 
 The app has three modes:
 
-- `Recommend Article`: default tab. Loads RSS links and automatically extracts the selected article into a read-only preview area. Extraction is rule-based; paragraph restructuring happens only when you generate the note.
+- `Recommend Article`: default tab. Loads RSS links and automatically extracts the selected article into a read-only preview area. Extraction is rule-based; sentence-by-sentence study notes are generated only when you generate the note.
 - `Paste Article`: paste only a title and article body.
 - `Article URL`: extract article text from a URL with `trafilatura`.
 
@@ -154,7 +154,7 @@ In the Streamlit UI, each `Generate` button has a save directory field above it.
 
 Custom save directories are remembered in local UI history and can be deleted from the selector.
 
-The article note includes frontmatter, the LLM-reconstructed original article paragraphs, paragraph-by-paragraph Korean translations, English and Korean summaries, key points, useful expressions, vocabulary and collocation tables, an expression lookup log, and reading notes.
+The article note includes frontmatter, the original article, sentence-by-sentence Korean translations, English and Korean summaries, key points, useful expressions, vocabulary and collocation tables, an expression lookup log, and reading notes.
 
 ## Tests
 

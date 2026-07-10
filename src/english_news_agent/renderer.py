@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import re
 
 import yaml
 
@@ -136,24 +137,20 @@ def _korean_translation_lines(analysis: ArticleAnalysis, original_article: str) 
             )
         return lines
 
-    paragraphs = [paragraph.strip() for paragraph in original_article.split("\n\n") if paragraph.strip()]
+    sentences = _split_sentences(original_article)
     return [
         line
-        for index, paragraph in enumerate(paragraphs, start=1)
-        for line in [f"### {_unit_label(analysis)} {index}", "", paragraph, "", "", ""]
+        for index, sentence in enumerate(sentences, start=1)
+        for line in [f"### {_unit_label(analysis)} {index}", "", sentence, "", "", ""]
     ]
 
 
 def _translation_heading(analysis: ArticleAnalysis) -> str:
-    if analysis.structure_type == "sentence":
-        return "## 문장별 Translation"
-    return "## 단락별 Translation"
+    return "## 문장별 Translation"
 
 
 def _unit_label(analysis: ArticleAnalysis) -> str:
-    if analysis.structure_type == "sentence":
-        return "Sentence"
-    return "Paragraph"
+    return "Sentence"
 
 
 def _translation_for_unit(analysis: ArticleAnalysis, translation: str) -> str:
@@ -185,6 +182,14 @@ def _first_translation_sentence(value: str) -> str:
         if marker in first_line:
             return first_line.split(marker, 1)[0].strip() + marker.strip()
     return first_line
+
+
+def _split_sentences(text: str) -> list[str]:
+    normalized = re.sub(r"\s+", " ", text.strip())
+    if not normalized:
+        return []
+    sentences = re.split(r"(?<=[.!?])\s+(?=[\"'‘’“”A-Z0-9])", normalized)
+    return [sentence.strip() for sentence in sentences if sentence.strip()]
 
 
 def _expression_lines(expressions) -> list[str]:

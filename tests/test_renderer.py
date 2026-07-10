@@ -29,7 +29,7 @@ def sample_analysis() -> ArticleAnalysis:
                 ],
             )
         ],
-        korean_translation="하이브리드 근무에 대한 논쟁입니다.",
+        korean_translation="하이브리드 근무는 여전히 논쟁거리입니다.",
         english_summary="Companies and workers are debating hybrid work.",
         korean_summary="회사와 근로자들이 하이브리드 근무를 논의하고 있습니다.",
         key_points=["Hybrid work is a compromise.", "Productivity measures are changing."],
@@ -65,8 +65,8 @@ def test_render_article_note_contains_required_sections():
     assert "## Original Article" in markdown
     assert "Hybrid work remains a point of debate." in markdown
     assert "Original text" not in markdown
-    assert "## 단락별 Translation" in markdown
-    assert "### Paragraph 1" in markdown
+    assert "## 문장별 Translation" in markdown
+    assert "### Sentence 1" in markdown
     assert "하이브리드 근무는 여전히 논쟁거리입니다." in markdown
     assert "**해석:**" not in markdown
     assert "| English Sentence | Korean Translation |" not in markdown
@@ -75,14 +75,15 @@ def test_render_article_note_contains_required_sections():
     assert "## Reading Notes" in markdown
 
 
-def test_render_sentence_fallback_uses_sentence_labels():
+def test_render_sentence_mode_does_not_use_paragraph_labels():
     analysis = sample_analysis()
-    analysis.structure_type = "sentence"
+    analysis.structure_type = "paragraph"
     markdown = render_article_note(analysis, "Original text", "https://example.com")
 
     assert "## 문장별 Translation" in markdown
     assert "### Sentence 1" in markdown
     assert "### Paragraph 1" not in markdown
+    assert "## 단락별 Translation" not in markdown
 
 
 def test_render_sentence_translation_removes_prefix_and_extra_sentences():

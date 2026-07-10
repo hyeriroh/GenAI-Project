@@ -61,7 +61,7 @@ def generate_notes(
             st.code(exc.raw_output, language="json")
             return None
         except ParagraphStructureError as exc:
-            st.error("OpenAI split the article sentence-by-sentence instead of grouping it by meaning. Raw output is shown below.")
+            st.error("OpenAI could not produce a valid sentence-by-sentence translation. Raw output is shown below.")
             st.code(exc.raw_output, language="json")
             return None
         except Exception as exc:
@@ -75,7 +75,7 @@ def generate_notes(
     st.success("Notes saved.")
     st.write(f"Article note: `{article_path}`")
     if analysis.structure_type == "sentence":
-        st.warning("The model could not create meaning-based paragraphs after two tries, so this note was saved with sentence-based translation sections.")
+        st.info("This note was saved with sentence-by-sentence translations.")
     with st.expander("Korean Summary", expanded=False):
         st.write(analysis.korean_summary)
     with st.expander("Full Korean Translation", expanded=False):
