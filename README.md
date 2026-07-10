@@ -45,27 +45,18 @@ Use `vault_path` for your local Obsidian vault. The app creates `news_dir` and `
 
 ## Obsidian MCP Vocabulary Tests
 
-The Streamlit app only generates article study notes. Vocabulary tests are run by an AI assistant through an Obsidian MCP server connected to the same vault. Set up the MCP server before asking the assistant to start a test.
+Vocabulary tests use an Obsidian MCP server connected to the same vault. This project uses `jkf87/obsidian-mcp-kr` as the reference server.
 
-This project uses the Korean Obsidian MCP server from `jkf87/obsidian-mcp-kr` as the reference implementation. Install and build it outside this repository, then register it with your AI assistant.
-
-Prerequisites:
-
-- Node.js 16 or newer
-- Bun, used by the MCP project build setup
-- An Obsidian vault that has been opened in Obsidian at least once
-
-Example install:
+Install the MCP server outside this repository:
 
 ```bash
-cd /Users/hrroh/projects
 git clone https://github.com/jkf87/obsidian-mcp-kr.git
 cd obsidian-mcp-kr
 npm install
 npm run build
 ```
 
-Example MCP server config:
+Register it with your AI assistant using this shape:
 
 ```json
 {
@@ -73,38 +64,23 @@ Example MCP server config:
     "obsidian-mcp-kr": {
       "command": "node",
       "args": [
-        "/Users/hrroh/projects/obsidian-mcp-kr/build/main.js",
-        "/Users/hrroh/projects/obsidian"
+        "/path/to/obsidian-mcp-kr/build/main.js",
+        "/path/to/your/obsidian-vault"
       ]
     }
   }
 }
 ```
 
-For Codex, register the server with equivalent command/args values:
+After registration, restart the assistant if the MCP tools are not visible. Then ask `영어뉴스 단어시험 시작`. Test files are stored under:
 
 ```text
-name: obsidian-mcp-kr
-command: node
-args:
-  - /Users/hrroh/projects/obsidian-mcp-kr/build/main.js
-  - /Users/hrroh/projects/obsidian
+<vault_path>/<news_dir>/Test/
+  test-history.md
+  YYYY-MM-DD_HHMM_vocab-test.md
 ```
 
-After registration, restart the AI assistant session if the MCP tools are not visible yet.
-
-Expected vault layout:
-
-```text
-<vault_path>/<news_dir>/
-  Test/
-    test-history.md
-    YYYY-MM-DD_HHMM_vocab-test.md
-```
-
-When you ask `영어뉴스 단어시험 시작`, the assistant should use MCP to read recent English News notes, select vocabulary from existing note sections, create a test note under `Test`, grade answers one by one, update the test note after each answer, and append the final result to `test-history.md`.
-
-The fixed operating protocol and fallback policy are documented in `docs/test-agent.md`. The pure selection, test rendering, grading, and history update logic lives in `src/english_news_agent/test_agent.py`.
+The detailed protocol is in `docs/test-agent.md`; the selection, grading, and history logic is in `src/english_news_agent/test_agent.py`.
 
 ## Streamlit App
 

@@ -1,7 +1,7 @@
 timezone: Asia/Seoul
 
 obsidian:
-  vault_path: /Users/hrroh/projects/obsidian
+  vault_path: ./obsidian-vault
   news_dir: 40 Resources/English News
   vocab_dir: 40 Resources/Vocabulary
 
