@@ -8,7 +8,13 @@ from english_news_agent.test_cli import (
     news_directory,
     run_vocab_test,
 )
-from english_news_agent.test_agent import GradeResult, VocabCandidate, build_vocab_questions, build_vocab_test_markdown
+from english_news_agent.test_agent import (
+    GradeResult,
+    VocabCandidate,
+    apply_answer_to_test_markdown,
+    build_vocab_questions,
+    build_vocab_test_markdown,
+)
 
 
 ARTICLE = """# Test Article
@@ -80,7 +86,7 @@ def test_run_vocab_test_creates_test_note_and_history(tmp_path: Path):
     assert any(line.startswith("Score:") for line in output)
 
 
-def test_finalize_test_markdown_writes_summary_and_review_terms():
+def test_finalize_test_markdown_writes_summary_and_detailed_review_notes():
     candidate = VocabCandidate(
         term="breach",
         meaning_ko="위반하다",
@@ -88,12 +94,14 @@ def test_finalize_test_markdown_writes_summary_and_review_terms():
         source_section="Vocabulary",
     )
     questions = build_vocab_questions([candidate])
+    grade = GradeResult("incorrect", "Review it.", 0, "Meaning was not covered.")
     markdown = build_vocab_test_markdown([candidate], datetime(2026, 7, 10, 21, 30))
+    markdown = apply_answer_to_test_markdown(markdown, 1, "깨다", grade)
 
     finalized = finalize_test_markdown(
         markdown,
         questions,
-        [GradeResult("incorrect", "Review it.", 0, "Meaning was not covered.")],
+        [grade],
         datetime(2026, 7, 10, 21, 35),
     )
 
@@ -102,4 +110,8 @@ def test_finalize_test_markdown_writes_summary_and_review_terms():
     assert "- score: 0 / 1" in finalized
     assert "- incorrect: 1" in finalized
     assert "- completed: 2026-07-10 21:35" in finalized
-    assert "## Review Needed\n- breach" in finalized
+    assert "## Review Needed\n### breach" in finalized
+    assert "- my_answer: 깨다" in finalized
+    assert "- correct_answer: 위반하다" in finalized
+    assert "- feedback: Review it." in finalized
+    assert "- rationale: Meaning was not covered." in finalized

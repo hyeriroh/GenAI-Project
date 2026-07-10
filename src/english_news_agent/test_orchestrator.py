@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import PurePosixPath
+import re
 from typing import Callable, Sequence
 
 from english_news_agent.models import StudySettings
@@ -48,8 +49,9 @@ def run_vocab_test_session(
     adapter: ObsidianVaultAdapter,
     news_dir: str,
     study_settings: StudySettings | None = None,
-    limit: int = 10,
+    limit: int = 20,
     source_limit: int = 20,
+    batch_size: int = 5,
     use_llm: bool = True,
     input_func: InputFunc = input,
     output_func: OutputFunc = print,
@@ -89,23 +91,26 @@ def run_vocab_test_session(
     test_note_persisted = _try_write_note(adapter, test_path, test_markdown, warnings, "create test note")
 
     grades: list[GradeResult] = []
-    for question in questions:
-        output_func(f"{question.id}/{len(questions)} {question.prompt}")
-        answer = input_func("Your answer: ")
-        grade = grade_answer(question, answer, study_settings, use_llm=use_llm)
-        grades.append(grade)
-        output_func(f"{grade.result} ({grade.points:g}) - {grade.feedback}")
-        if grade.rationale:
-            output_func(f"Reason: {grade.rationale}")
-        test_markdown = apply_answer_to_test_markdown(test_markdown, question.id, answer, grade)
-        if test_note_persisted:
-            test_note_persisted = _try_write_note(
-                adapter,
-                test_path,
-                test_markdown,
-                warnings,
-                f"update test note after question {question.id}",
-            )
+    for batch_index, batch in enumerate(_question_batches(questions, batch_size), start=1):
+        output_func(f"Batch {batch_index} ({batch[0].id}-{batch[-1].id}/{len(questions)})")
+        for question in batch:
+            output_func(f"{question.id}. {question.prompt}")
+        for question in batch:
+            answer = input_func(f"Answer {question.id}: ")
+            grade = grade_answer(question, answer, study_settings, use_llm=use_llm)
+            grades.append(grade)
+            output_func(f"{question.id}: {grade.result} ({grade.points:g}) - {grade.feedback}")
+            if grade.rationale:
+                output_func(f"Reason: {grade.rationale}")
+            test_markdown = apply_answer_to_test_markdown(test_markdown, question.id, answer, grade)
+            if test_note_persisted:
+                test_note_persisted = _try_write_note(
+                    adapter,
+                    test_path,
+                    test_markdown,
+                    warnings,
+                    f"update test note after question {question.id}",
+                )
 
     completed_at = datetime.now() if now is None else created_at
     test_markdown = finalize_test_markdown(test_markdown, questions, grades, completed_at)
@@ -169,12 +174,6 @@ def finalize_test_markdown(
     partial = sum(1 for grade in grades if grade.result == "partial")
     incorrect = sum(1 for grade in grades if grade.result == "incorrect")
     score = sum(grade.points for grade in grades)
-    review_terms = [
-        question.candidate.term
-        for question, grade in zip(questions, grades, strict=False)
-        if grade.result != "correct"
-    ]
-
     completed_value = completed_at.strftime("%Y-%m-%d %H:%M")
     replacements = {
         "status: in_progress": "status: completed",
@@ -189,11 +188,55 @@ def finalize_test_markdown(
     for old, new in replacements.items():
         markdown = markdown.replace(old, new, 1)
 
-    review_block = "\n".join(f"- {term}" for term in review_terms) or "- "
+    review_block = _review_needed_block(markdown, questions, grades)
     if "## Review Needed\n" in markdown:
         before, _sep, _after = markdown.partition("## Review Needed\n")
         markdown = before + "## Review Needed\n" + review_block + "\n"
     return markdown
+
+
+def _review_needed_block(
+    markdown: str,
+    questions: Sequence[VocabQuestion],
+    grades: Sequence[GradeResult],
+) -> str:
+    rows: list[str] = []
+    for question, grade in zip(questions, grades, strict=False):
+        if grade.result == "correct":
+            continue
+        user_answer = _recorded_answer(markdown, question.id)
+        rows.extend(
+            [
+                f"### {question.candidate.term}",
+                f"- source: [[{PurePosixPath(question.candidate.source_note).stem}]]",
+                f"- prompt: {question.prompt}",
+                f"- my_answer: {user_answer or '-'}",
+                f"- correct_answer: {question.correct_answer}",
+                f"- result: {grade.result}",
+                f"- feedback: {grade.feedback}",
+                f"- rationale: {grade.rationale or '-'}",
+                "",
+            ]
+        )
+    if not rows:
+        return "- "
+    return "\n".join(rows).rstrip()
+
+
+def _recorded_answer(markdown: str, question_id: int) -> str:
+    pattern = re.compile(
+        rf"### {question_id}\. .*?\n- id:.*?\n.*?\n- user_answer:\s*(.*?)\n- result:",
+        re.DOTALL,
+    )
+    match = pattern.search(markdown)
+    if not match:
+        return ""
+    return " ".join(match.group(1).split())
+
+
+def _question_batches(questions: Sequence[VocabQuestion], batch_size: int) -> list[list[VocabQuestion]]:
+    size = max(1, batch_size)
+    return [list(questions[index : index + size]) for index in range(0, len(questions), size)]
 
 
 def _try_write_note(

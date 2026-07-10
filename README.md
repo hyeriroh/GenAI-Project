@@ -80,7 +80,7 @@ Register it with your AI assistant using this shape:
 }
 ```
 
-After registration, restart the assistant if the MCP tools are not visible. Then ask `영어뉴스 단어시험 시작` or `옵시디언 기반 내 단어시험 만들어줘`. The root `AGENTS.md` routes those requests to the live quiz protocol. The intended flow is a live chat quiz: Codex asks one question at a time, grades each answer, updates the in-progress test note, and finalizes the result at the end. Test files are stored under:
+After registration, restart the assistant if the MCP tools are not visible. Then ask `영어뉴스 단어시험 시작`, `옵시디언 기반 단어시험 시작해`, or `옵시디언 기반 내 단어시험 만들어줘`. The root `AGENTS.md` routes those requests to the live quiz protocol. For short start commands, Codex should first confirm that you want the live Test-md workflow. The intended flow is a live chat quiz: Codex creates the test note under `Test`, asks about 20 questions in batches of 5, grades submitted answers in the chat, updates the in-progress test note, and finalizes the result at the end. Do not use a `Quizzes` folder for this workflow. If the `Test` folder does not exist under English News, the assistant should create it. Test files are stored under:
 
 ```text
 <vault_path>/<news_dir>/Test/
@@ -88,12 +88,12 @@ After registration, restart the assistant if the MCP tools are not visible. Then
   YYYY-MM-DD_HHMM_vocab-test.md
 ```
 
-The detailed protocol is in `docs/test-agent.md`; the selection, LLM-judge grading, fallback grading, and history logic is in `src/english_news_agent/test_agent.py`. `test-history.md` is used on later tests for light personalization.
+The detailed protocol is in `docs/test-agent.md`; the selection, LLM-judge grading, fallback grading, and history logic is in `src/english_news_agent/test_agent.py`. A quiz is complete only after the completed test note contains the questions, user answers, grades, feedback, final score, and review terms, and `test-history.md` has been updated for later personalization. If a live quiz ended without a saved note, ask `방금 본 단어시험 저장해줘`; Codex should reconstruct the result from chat and write it to `Test` rather than starting a new quiz.
 
 You can also run the local file-based test runner without MCP:
 
 ```bash
-PYTHONPATH=src python -m english_news_agent.test_cli start --limit 10
+PYTHONPATH=src python -m english_news_agent.test_cli start --limit 20
 ```
 
 To run through the stdio MCP adapter, add `mcp` settings to `config.local.yaml` and use:

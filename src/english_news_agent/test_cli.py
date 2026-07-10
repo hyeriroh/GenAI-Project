@@ -22,7 +22,7 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     start = subparsers.add_parser("start", help="Create and run a vocabulary test.")
     start.add_argument("--config", default="config.yaml", help="Path to config.yaml. config.local.yaml is preferred automatically.")
-    start.add_argument("--limit", type=int, default=10, help="Number of questions to generate.")
+    start.add_argument("--limit", type=int, default=20, help="Number of questions to generate.")
     start.add_argument("--source-limit", type=int, default=20, help="Number of recent article notes to scan.")
     start.add_argument("--no-llm", action="store_true", help="Use deterministic fallback grading instead of the LLM judge.")
     start.add_argument("--adapter", choices=["local", "mcp"], default="local", help="Vault adapter to use.")
@@ -42,7 +42,7 @@ def main(argv: Sequence[str] | None = None) -> None:
 
 def run_vocab_test(
     config: AppConfig,
-    limit: int = 10,
+    limit: int = 20,
     source_limit: int = 20,
     use_llm: bool = True,
     input_func: InputFunc = input,
