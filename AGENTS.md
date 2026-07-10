@@ -1,5 +1,27 @@
 # English News Agent Instructions
 
+## Hard Stop: Vocabulary Tests
+
+If the user asks for an Obsidian-based English News vocabulary test, do not create a static quiz note and stop.
+
+Forbidden behavior:
+
+- Do not create `40 Resources/English News/Quizzes/`.
+- Do not say only `옵시디언에 단어 시험을 생성했습니다` and finish.
+- Do not create a note with hidden answers, foldable answer sections, or only a review checklist as the main result.
+- Do not end before the user actually answers questions in chat.
+
+Required behavior:
+
+1. Ask the short-command confirmation when needed.
+2. Use or create `40 Resources/English News/Test/`.
+3. Create one in-progress test note there.
+4. Ask questions live in chat, 5 at a time.
+5. After each user answer, grade it and update the same Test md with the question, correct answer, user answer, result, feedback, and rationale.
+6. At the end, finalize that same Test md and update `test-history.md`.
+
+If you already created a `Quizzes` note by mistake, do not continue that path. Switch to the live `Test` workflow or ask whether to delete/ignore the mistaken quiz note.
+
 This repository is an English News Agent for Obsidian-based English study.
 
 ## Vocabulary Test Trigger

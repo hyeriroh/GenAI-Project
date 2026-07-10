@@ -33,6 +33,22 @@ Start this workflow when the user asks any equivalent of:
 - "시험 결과 기록해줘"
 - "방금 본 단어시험 저장해줘"
 
+## Forbidden Static Quiz Behavior
+
+The following is explicitly wrong for this project:
+
+```text
+옵시디언에 단어 시험을 생성했습니다.
+- 위치: 40 Resources/English News/Quizzes/...
+- 총 20문제
+- 정답·해설은 접이식으로 숨김
+- 오답 복습 체크리스트 포함
+```
+
+If you are about to produce that kind of response, stop. The required output is
+not a static worksheet. The required behavior is a live chat test with continuous
+writes to `40 Resources/English News/Test/YYYY-MM-DD_HHMM_vocab-test.md`.
+
 ## Short Command Confirmation
 
 When the user only says a short start command like `옵시디언 기반 단어시험 시작해`, ask this confirmation before creating files or asking questions:
@@ -135,7 +151,7 @@ Use this mode when the user says the quiz was completed in chat but no Markdown
 record was saved, for example `시험 결과 기록해줘` or `방금 본 단어시험 저장해줘`.
 
 Do not generate new questions in recovery mode. Reconstruct the result from the
-chat transcript and persist it.
+chat transcript and persist it. Never recover into a `Quizzes` folder.
 
 Required recovery behavior:
 
