@@ -41,8 +41,9 @@ instead. Keep test files and results in the same test note.
 
 The implemented orchestrator is `run_vocab_test_session()` in
 `src/english_news_agent/test_orchestrator.py`. It uses the adapter methods
-`list_notes`, `read_note`, `ensure_folder`, and `write_note`;
-`MockObsidianAdapter` verifies the MCP-style protocol in tests.
+`list_notes`, `read_note`, `ensure_folder`, and `write_note`.
+`MockObsidianAdapter` verifies failure recovery in tests, and
+`StdioMcpObsidianAdapter` calls `obsidian-mcp-kr` tools over stdio.
 
 1. List or confirm the available vault.
 2. Ensure `40 Resources/English News/Test` exists.

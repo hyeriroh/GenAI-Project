@@ -1,12 +1,18 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import PurePosixPath
 from typing import Callable, Sequence
 
 from english_news_agent.models import StudySettings
-from english_news_agent.obsidian_adapter import ObsidianVaultAdapter
+from english_news_agent.obsidian_adapter import (
+    ObsidianVaultAdapter,
+    VaultAdapterError,
+    VaultListError,
+    VaultReadError,
+    VaultWriteError,
+)
 from english_news_agent.test_agent import (
     GradeResult,
     SourceNote,
@@ -27,10 +33,15 @@ OutputFunc = Callable[[str], None]
 
 @dataclass(frozen=True)
 class VocabTestSessionResult:
-    test_path: str
+    test_path: str | None
     history_path: str
     score: float
     total: int
+    warnings: list[str] = field(default_factory=list)
+    pending_test_markdown: str = ""
+    pending_history_entry: str = ""
+    test_note_persisted: bool = True
+    history_updated: bool = True
 
 
 def run_vocab_test_session(
@@ -45,14 +56,25 @@ def run_vocab_test_session(
     now: datetime | None = None,
 ) -> VocabTestSessionResult:
     created_at = now or datetime.now()
+    warnings: list[str] = []
     news_dir = _normalize_dir(news_dir)
     test_dir = _join_vault_path(news_dir, "Test")
-    adapter.ensure_folder(test_dir)
+    try:
+        adapter.ensure_folder(test_dir)
+    except VaultWriteError as exc:
+        raise RuntimeError(f"Could not prepare test folder {test_dir}: {exc}") from exc
 
     history_path = _join_vault_path(test_dir, "test-history.md")
-    history_markdown = adapter.read_note(history_path) or ""
+    try:
+        history_markdown = adapter.read_note(history_path) or ""
+    except VaultReadError as exc:
+        history_markdown = ""
+        warnings.append(f"Could not read test history; continuing with empty history: {exc}")
 
-    source_notes = load_recent_source_notes_from_adapter(adapter, news_dir, source_limit)
+    try:
+        source_notes = load_recent_source_notes_from_adapter(adapter, news_dir, source_limit, warnings)
+    except VaultListError as exc:
+        raise RuntimeError(f"Could not list source notes under {news_dir}: {exc}") from exc
     if not source_notes:
         raise RuntimeError(f"No source notes found in {news_dir}")
 
@@ -64,7 +86,7 @@ def run_vocab_test_session(
     filename = test_filename(created_at)
     test_path = _join_vault_path(test_dir, filename)
     test_markdown = build_vocab_test_markdown(candidates, created_at)
-    adapter.write_note(test_path, test_markdown)
+    test_note_persisted = _try_write_note(adapter, test_path, test_markdown, warnings, "create test note")
 
     grades: list[GradeResult] = []
     for question in questions:
@@ -76,24 +98,43 @@ def run_vocab_test_session(
         if grade.rationale:
             output_func(f"Reason: {grade.rationale}")
         test_markdown = apply_answer_to_test_markdown(test_markdown, question.id, answer, grade)
-        adapter.write_note(test_path, test_markdown)
+        if test_note_persisted:
+            test_note_persisted = _try_write_note(
+                adapter,
+                test_path,
+                test_markdown,
+                warnings,
+                f"update test note after question {question.id}",
+            )
 
     completed_at = datetime.now() if now is None else created_at
     test_markdown = finalize_test_markdown(test_markdown, questions, grades, completed_at)
-    adapter.write_note(test_path, test_markdown)
+    if not _try_write_note(adapter, test_path, test_markdown, warnings, "finalize test note"):
+        test_note_persisted = False
 
     entry = build_test_history_entry(filename, questions, grades, completed_at)
-    adapter.write_note(history_path, update_history_markdown(history_markdown, entry))
+    history_updated = _try_write_note(adapter, history_path, update_history_markdown(history_markdown, entry), warnings, "update test history")
 
     score = sum(grade.points for grade in grades)
     output_func(f"Score: {score:g}/{len(questions)}")
-    return VocabTestSessionResult(test_path=test_path, history_path=history_path, score=score, total=len(questions))
+    return VocabTestSessionResult(
+        test_path=test_path if test_note_persisted else None,
+        history_path=history_path,
+        score=score,
+        total=len(questions),
+        warnings=warnings,
+        pending_test_markdown="" if test_note_persisted else test_markdown,
+        pending_history_entry="" if history_updated else entry,
+        test_note_persisted=test_note_persisted,
+        history_updated=history_updated,
+    )
 
 
 def load_recent_source_notes_from_adapter(
     adapter: ObsidianVaultAdapter,
     news_dir: str,
     limit: int = 20,
+    warnings: list[str] | None = None,
 ) -> list[SourceNote]:
     news_dir = _normalize_dir(news_dir)
     refs = [
@@ -105,7 +146,12 @@ def load_recent_source_notes_from_adapter(
 
     notes: list[SourceNote] = []
     for ref in refs[:limit]:
-        content = adapter.read_note(ref.path)
+        try:
+            content = adapter.read_note(ref.path)
+        except VaultReadError as exc:
+            if warnings is not None:
+                warnings.append(f"Could not read source note {ref.path}; skipping it: {exc}")
+            continue
         if content is None:
             continue
         filename = PurePosixPath(ref.path).relative_to(PurePosixPath(news_dir)).as_posix()
@@ -148,6 +194,21 @@ def finalize_test_markdown(
         before, _sep, _after = markdown.partition("## Review Needed\n")
         markdown = before + "## Review Needed\n" + review_block + "\n"
     return markdown
+
+
+def _try_write_note(
+    adapter: ObsidianVaultAdapter,
+    note_path: str,
+    content: str,
+    warnings: list[str],
+    operation: str,
+) -> bool:
+    try:
+        adapter.write_note(note_path, content)
+        return True
+    except VaultWriteError as exc:
+        warnings.append(f"Could not {operation}; keeping generated content in memory: {exc}")
+        return False
 
 
 def _is_source_note(news_dir: str, note_path: str) -> bool:

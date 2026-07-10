@@ -88,8 +88,16 @@ class StudySettings(BaseModel):
     target_language: str = "Korean"
 
 
+class McpConfig(BaseModel):
+    command: str = "node"
+    args: list[str] = Field(default_factory=list)
+    vault: str = ""
+    timeout_seconds: float = 10
+
+
 class AppConfig(BaseModel):
     timezone: str = "Asia/Seoul"
     obsidian: ObsidianConfig
     study: StudySettings = Field(default_factory=StudySettings)
+    mcp: McpConfig | None = None
     rss_feeds: list[RssFeed] = Field(default_factory=list)

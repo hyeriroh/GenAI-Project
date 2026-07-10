@@ -39,6 +39,14 @@ obsidian:
   vault_path: /path/to/your/obsidian-vault
   news_dir: 40 Resources/English News
   vocab_dir: 40 Resources/Vocabulary
+
+mcp:
+  command: node
+  args:
+    - /path/to/obsidian-mcp-kr/build/main.js
+    - /path/to/your/obsidian-vault
+  vault: your-vault-name
+  timeout_seconds: 10
 ```
 
 `vault_path` can be absolute, relative, or use `~`. The app creates `news_dir` and `vocab_dir` if they do not exist. RSS feeds stay in `config.yaml` unless you want to override them locally.
@@ -86,6 +94,12 @@ You can also run the local file-based test runner without MCP:
 
 ```bash
 PYTHONPATH=src python -m english_news_agent.test_cli start --limit 10
+```
+
+To run through the stdio MCP adapter, add `mcp` settings to `config.local.yaml` and use:
+
+```bash
+PYTHONPATH=src python -m english_news_agent.test_cli start --adapter mcp --limit 10
 ```
 
 Use `--no-llm` to grade with the deterministic fallback rules.

@@ -75,3 +75,91 @@ def test_run_vocab_test_session_stops_when_no_source_notes():
             input_func=lambda _prompt: "",
             output_func=lambda _message: None,
         )
+
+
+def test_run_vocab_test_session_continues_when_history_read_fails():
+    adapter = MockObsidianAdapter(
+        {"40 Resources/English News/article.md": ARTICLE},
+        fail_on_read={"40 Resources/English News/Test/test-history.md"},
+    )
+    answers = iter(["위반하다"])
+
+    result = run_vocab_test_session(
+        adapter=adapter,
+        news_dir="40 Resources/English News",
+        limit=1,
+        use_llm=False,
+        input_func=lambda _prompt: next(answers),
+        output_func=lambda _message: None,
+        now=datetime(2026, 7, 10, 21, 30),
+    )
+
+    assert result.score == 1
+    assert result.test_note_persisted
+    assert result.history_updated
+    assert any("Could not read test history" in warning for warning in result.warnings)
+
+
+def test_run_vocab_test_session_keeps_pending_markdown_when_test_writes_fail():
+    test_path = "40 Resources/English News/Test/2026-07-10_2130_vocab-test.md"
+    adapter = MockObsidianAdapter(
+        {"40 Resources/English News/article.md": ARTICLE},
+        fail_on_write={test_path},
+    )
+    answers = iter(["위반하다"])
+
+    result = run_vocab_test_session(
+        adapter=adapter,
+        news_dir="40 Resources/English News",
+        limit=1,
+        use_llm=False,
+        input_func=lambda _prompt: next(answers),
+        output_func=lambda _message: None,
+        now=datetime(2026, 7, 10, 21, 30),
+    )
+
+    assert result.test_path is None
+    assert not result.test_note_persisted
+    assert "status: completed" in result.pending_test_markdown
+    assert "- user_answer: 위반하다" in result.pending_test_markdown
+    assert any("Could not create test note" in warning for warning in result.warnings)
+
+
+def test_run_vocab_test_session_keeps_pending_history_row_when_history_write_fails():
+    history_path = "40 Resources/English News/Test/test-history.md"
+    adapter = MockObsidianAdapter(
+        {"40 Resources/English News/article.md": ARTICLE},
+        fail_on_write={history_path},
+    )
+    answers = iter(["위반하다"])
+
+    result = run_vocab_test_session(
+        adapter=adapter,
+        news_dir="40 Resources/English News",
+        limit=1,
+        use_llm=False,
+        input_func=lambda _prompt: next(answers),
+        output_func=lambda _message: None,
+        now=datetime(2026, 7, 10, 21, 30),
+    )
+
+    assert result.test_note_persisted
+    assert not result.history_updated
+    assert "[[2026-07-10_2130_vocab-test]]" in result.pending_history_entry
+    assert any("Could not update test history" in warning for warning in result.warnings)
+
+
+def test_run_vocab_test_session_reports_list_failure():
+    adapter = MockObsidianAdapter(
+        {"40 Resources/English News/article.md": ARTICLE},
+        fail_on_list={"40 Resources/English News"},
+    )
+
+    with pytest.raises(RuntimeError, match="Could not list source notes"):
+        run_vocab_test_session(
+            adapter=adapter,
+            news_dir="40 Resources/English News",
+            use_llm=False,
+            input_func=lambda _prompt: "",
+            output_func=lambda _message: None,
+        )
