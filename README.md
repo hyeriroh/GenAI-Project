@@ -43,6 +43,23 @@ obsidian:
 
 Use `vault_path` for your local Obsidian vault. The app creates `news_dir` and `vocab_dir` if they do not exist. RSS feeds are also configured in `config.yaml`.
 
+## Obsidian MCP Vocabulary Tests
+
+The Streamlit app only generates article study notes. Vocabulary tests are run by an AI assistant through an Obsidian MCP server connected to the same vault. Set up the MCP server before asking the assistant to start a test.
+
+Expected vault layout:
+
+```text
+<vault_path>/<news_dir>/
+  Test/
+    test-history.md
+    YYYY-MM-DD_HHMM_vocab-test.md
+```
+
+When you ask `영어뉴스 단어시험 시작`, the assistant should use MCP to read recent English News notes, select vocabulary from existing note sections, create a test note under `Test`, grade answers one by one, update the test note after each answer, and append the final result to `test-history.md`.
+
+The fixed operating protocol and fallback policy are documented in `docs/test-agent.md`. The pure selection, test rendering, grading, and history update logic lives in `src/english_news_agent/test_agent.py`.
+
 ## Streamlit App
 
 ```bash
