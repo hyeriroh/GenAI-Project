@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from pydantic import ValidationError
 
-from english_news_agent.models import ArticleAnalysis, ExpressionLookup, StudySettings
+from english_news_agent.models import ArticleAnalysis, ExpressionLookup, ParagraphTranslation, StudySettings
 
 
 class AnalysisParseError(RuntimeError):
@@ -29,6 +29,26 @@ def mark_sentence_fallback(analysis: ArticleAnalysis) -> ArticleAnalysis:
     return analysis
 
 
+def build_sentence_fallback_analysis(analysis: ArticleAnalysis, article_text: str) -> ArticleAnalysis:
+    source_sentences = _split_sentences(article_text)
+    existing_translations = [
+        item.korean_translation.strip()
+        for item in analysis.paragraph_translations
+        if item.korean_translation.strip()
+    ]
+    analysis.paragraph_translations = [
+        ParagraphTranslation(
+            original=sentence,
+            korean_translation=existing_translations[index] if index < len(existing_translations) else "",
+        )
+        for index, sentence in enumerate(source_sentences)
+    ]
+    analysis.korean_translation = "\n\n".join(
+        item.korean_translation for item in analysis.paragraph_translations if item.korean_translation
+    )
+    return mark_sentence_fallback(analysis)
+
+
 def analyze_article(
     article_text: str,
     title: str,
@@ -42,7 +62,7 @@ def analyze_article(
     settings = settings or StudySettings()
     client = OpenAI(api_key=api_key)
 
-    last_raw_output = ""
+    fallback_analysis: ArticleAnalysis | None = None
     for attempt in range(2):
         prompt = _build_prompt(article_text, title, settings, force_regroup=attempt > 0)
         response = client.chat.completions.create(
@@ -60,14 +80,19 @@ def analyze_article(
             response_format={"type": "json_object"},
             temperature=0.2,
         )
-        last_raw_output = response.choices[0].message.content or ""
-        analysis = parse_analysis_json(last_raw_output)
-        if not _looks_sentence_split(analysis):
-            analysis.structure_type = "paragraph"
-            return analysis
+        raw_output = response.choices[0].message.content or ""
+        analysis = parse_analysis_json(raw_output)
         fallback_analysis = analysis
+        if _looks_sentence_split(analysis):
+            continue
+        if not article_sentences_match(article_text, analysis):
+            continue
+        analysis.structure_type = "paragraph"
+        return analysis
 
-    return mark_sentence_fallback(fallback_analysis)
+    if fallback_analysis is None:
+        raise AnalysisParseError("")
+    return build_sentence_fallback_analysis(fallback_analysis, article_text)
 
 
 def explain_expression(
@@ -132,8 +157,8 @@ def _build_prompt(
     retry_instruction = ""
     if force_regroup:
         retry_instruction = """
-        Your previous paragraph structure was rejected because it split the article sentence-by-sentence.
-        Try again. Create fewer, meaning-based paragraphs. A paragraph should usually contain 2-5 related sentences.
+        Your previous paragraph structure was rejected because it either split the article sentence-by-sentence or failed to preserve the exact original sentence set and order.
+        Try again. Create fewer, meaning-based paragraphs, but preserve every original sentence exactly once and in order.
         """
 
     return dedent(
@@ -186,8 +211,30 @@ def _looks_sentence_split(analysis: ArticleAnalysis) -> bool:
     return len(paragraphs) > 12 or single_sentence_count / len(paragraphs) >= 0.6
 
 
+def article_sentences_match(article_text: str, analysis: ArticleAnalysis) -> bool:
+    source_sentences = [_normalize_sentence(sentence) for sentence in _split_sentences(article_text)]
+    analysis_sentences = [
+        _normalize_sentence(sentence)
+        for item in analysis.paragraph_translations
+        for sentence in _split_sentences(item.original)
+    ]
+    return bool(source_sentences) and source_sentences == analysis_sentences
+
+
+def _split_sentences(text: str) -> list[str]:
+    normalized = re.sub(r"\s+", " ", text.strip())
+    if not normalized:
+        return []
+    sentences = re.split(r"(?<=[.!?])\s+(?=[\"'‘’“”A-Z0-9])", normalized)
+    return [sentence.strip() for sentence in sentences if sentence.strip()]
+
+
 def _sentence_count(text: str) -> int:
-    return len([part for part in re.split(r"(?<=[.!?])\s+", text.replace("\n", " ")) if part.strip()])
+    return len(_split_sentences(text))
+
+
+def _normalize_sentence(text: str) -> str:
+    return re.sub(r"\s+", " ", text.strip()).replace("‘", "'").replace("’", "'").replace("“", '"').replace("”", '"')
 
 
 def _build_expression_prompt(expression: str, article_context: str, lookup_type: str = "sentence") -> str:

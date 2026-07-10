@@ -1,0 +1,18 @@
+# Local environment
+.env
+.venv/
+config.local.yaml
+
+# Python/runtime artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.DS_Store
+
+# Local app state and generated notes
+.save_dir_history.json
+obsidian-vault/
+HANDOFF.md
+
+# Local tool clones
+tools/obsidian-mcp-kr/

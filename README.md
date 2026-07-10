@@ -30,7 +30,7 @@ OPENAI_API_KEY=your_openai_api_key_here
 
 ## Config
 
-Edit `config.yaml` before generating notes. Set `vault_path` to your own Obsidian vault path:
+`config.yaml` is the shared default. For your own machine, create `config.local.yaml`; it is loaded before `config.yaml` and is ignored by git.
 
 ```yaml
 timezone: Asia/Seoul
@@ -41,7 +41,7 @@ obsidian:
   vocab_dir: 40 Resources/Vocabulary
 ```
 
-`vault_path` can be absolute, relative, or use `~`. Keep your personal path in your local checkout and avoid committing machine-specific changes. The app creates `news_dir` and `vocab_dir` if they do not exist. RSS feeds are also configured in `config.yaml`.
+`vault_path` can be absolute, relative, or use `~`. The app creates `news_dir` and `vocab_dir` if they do not exist. RSS feeds stay in `config.yaml` unless you want to override them locally.
 
 ## Obsidian MCP Vocabulary Tests
 

@@ -1,4 +1,9 @@
-from english_news_agent.analyzer import _looks_sentence_split, mark_sentence_fallback
+from english_news_agent.analyzer import (
+    _looks_sentence_split,
+    article_sentences_match,
+    build_sentence_fallback_analysis,
+    mark_sentence_fallback,
+)
 from english_news_agent.models import ArticleAnalysis, ParagraphTranslation
 
 
@@ -39,3 +44,34 @@ def test_mark_sentence_fallback_sets_structure_type():
     marked = mark_sentence_fallback(analysis)
 
     assert marked.structure_type == "sentence"
+
+
+def test_article_sentences_match_allows_regrouped_original_sentences():
+    article = "First sentence. Second sentence. Third sentence."
+    analysis = analysis_with_paragraphs([
+        "First sentence. Second sentence.",
+        "Third sentence.",
+    ])
+
+    assert article_sentences_match(article, analysis)
+
+
+def test_article_sentences_match_rejects_missing_or_reordered_sentences():
+    article = "First sentence. Second sentence. Third sentence."
+
+    assert not article_sentences_match(article, analysis_with_paragraphs(["First sentence. Third sentence."]))
+    assert not article_sentences_match(article, analysis_with_paragraphs(["Second sentence. First sentence. Third sentence."]))
+
+
+def test_build_sentence_fallback_preserves_source_sentence_order():
+    article = "First sentence. Second sentence. Third sentence."
+    analysis = analysis_with_paragraphs(["First sentence. Third sentence."])
+
+    fallback = build_sentence_fallback_analysis(analysis, article)
+
+    assert fallback.structure_type == "sentence"
+    assert [item.original for item in fallback.paragraph_translations] == [
+        "First sentence.",
+        "Second sentence.",
+        "Third sentence.",
+    ]
