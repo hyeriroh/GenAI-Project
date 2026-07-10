@@ -1,8 +1,0 @@
-.venv/
-.env
-__pycache__/
-*.pyc
-.DS_Store
-.pytest_cache/
-HANDOFF.md
-tools/obsidian-mcp-kr/
